@@ -6,14 +6,15 @@ from report import FarmingReport
 import mss
 import time
 import random
+import config
 
 # gamepad = None
 gamepad = Gamepad()
 sct = mss.mss()
-monitor = sct.monitors[2]
+monitor = sct.monitors[config.MONITOR]
 report = FarmingReport()
 
-def wait_screen(screen: ScreenBase, second: int = 15):
+def wait_screen(screen: ScreenBase, second: int = 15) -> dict:
     print(f"{screen.screen} >> waiting")
     for _ in range(second):
         match = screen.match(screenshot=sct.grab(monitor))
@@ -22,6 +23,75 @@ def wait_screen(screen: ScreenBase, second: int = 15):
         time.sleep(1)
 
     return None
+
+
+def navigate(screen: ScreenBase, dst_template: str, src_template: str, confirmation_template: str = "", 
+    dur_move: int = None, dur_limit: int = 30, dur_cycle: float = 1, success_callback: callable = None, fail_callback: callable = None):
+
+    def check_confirmation(dur_current):
+        if confirmation_template:
+            return screen.match(confirmation_template, sct.grab(monitor))
+        elif dur_move is not None:
+            return dur_current >= dur_move
+
+        return None
+
+    print(f"{screen.screen} >> navigating...")
+
+    templates = [
+        {
+            'title': 'dst',
+            'path': dst_template
+        }, {
+            'title': 'src',
+            'path': src_template
+        }
+    ]
+
+    prev_analog_x = 0
+    prev_analog_y = 0
+
+    navigation_multiplier = 2.4 if config.MOBILE else 4
+
+    for i in range(dur_limit):
+        matches = screen.matches(templates, sct.grab(monitor), 0.4)
+        confirmation = check_confirmation(i)
+
+        analog_x = 0
+        analog_y = 0
+
+        if confirmation:
+            print(f"{screen.screen} >> navigation confirmed")
+
+            gamepad.left_analog_reset()
+
+            if success_callback:
+                success_callback()
+            
+            return True
+
+        elif len(matches) == len(templates):
+            dst = matches[0]
+            src = matches[1]
+
+            src.width, src.height = config.RESOLUTION
+            analog_x, analog_y = gamepad.get_analog_direction(src, dst, navigation_multiplier)
+
+        if (prev_analog_x != analog_x) or (prev_analog_y != analog_y):
+            print(f"{screen.screen} >> navigating to destination ({analog_x}, {analog_y})")
+            prev_analog_x = analog_x
+            prev_analog_y = analog_y
+
+        gamepad.left_analog(x=analog_x, y=analog_y, delay=0)
+        time.sleep(dur_cycle)
+    else:
+        print(f"{screen.screen} >> navigation failed")
+        gamepad.left_analog_reset()
+        
+        if fail_callback:
+            fail_callback()
+
+    return False
 
 
 def login() -> bool:
@@ -48,28 +118,49 @@ def login() -> bool:
 
 
 def cast_skill(combo: int = 1):
-    match combo:
-        case 1:
-            for _ in range(random.randint(2, 4)):
-                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_B, 0.1)
-            gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_X)
-            gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_X)
+    if config.MODE == 'PC':
+        match combo:
+            case 1:
+                for _ in range(random.randint(2, 4)):
+                    gamepad.left_trigger(delay=0.1)
+                gamepad.right_trigger()
+                gamepad.right_trigger()
+                for _ in range(random.randint(4, 10)):
+                    gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_X)
+            case 2:
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_LEFT_SHOULDER)
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_LEFT_SHOULDER)
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_LEFT_SHOULDER)
+                for _ in range(random.randint(2, 4)):
+                    gamepad.right_trigger()
+            case 3:
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_Y)
+            case _:
+                for _ in range(random.randint(4, 8)):
+                    gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_X)
+    else:
+        match combo:
+            case 1:
+                for _ in range(random.randint(2, 4)):
+                    gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_B, 0.1)
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_X)
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_X)
 
-            gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_B)
-            for _ in range(random.randint(2, 6)):
-                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER)
-        case 2:
-            gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_Y)
-            gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_Y)
-            gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_A)
-            gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_A)
-        case 3:
-            gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_B)
-            gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_X)
-            gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_X)
-        case _:
-            for _ in range(random.randint(2, 6)):
-                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER)
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_B)
+                for _ in range(random.randint(2, 6)):
+                    gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER)
+            case 2:
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_Y)
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_Y)
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_A)
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_A)
+            case 3:
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_B)
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_X)
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_X)
+            case _:
+                for _ in range(random.randint(2, 6)):
+                    gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER)
 
 
 def world_to_teamup(dungeon_name: str):
@@ -79,10 +170,19 @@ def world_to_teamup(dungeon_name: str):
     match = wait_screen(screen)
     if match:
         screen.log_on_focus()
-        gamepad.hold_button(XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER)
-        gamepad.right_analog(x=1, y=-1)
-        gamepad.right_analog_reset()
-        gamepad.release_button(XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER)
+
+        # open up wheel menu
+        if config.MODE == 'PC':
+            gamepad.hold_button(XUSB_BUTTON.XUSB_GAMEPAD_LEFT_SHOULDER)
+            gamepad.right_analog(x=1, y=-1)
+            gamepad.right_analog_reset()
+            gamepad.release_button(XUSB_BUTTON.XUSB_GAMEPAD_LEFT_SHOULDER)
+        else:
+            gamepad.hold_button(XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER)
+            gamepad.right_analog(x=1, y=-1)
+            gamepad.right_analog_reset()
+            gamepad.release_button(XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER)
+
         time.sleep(1)
     else:
         screen.log_undetected()
@@ -93,7 +193,19 @@ def world_to_teamup(dungeon_name: str):
     match = wait_screen(screen)
     if match:
         screen.log_on_focus()
-        gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_A)
+
+        if config.MODE == 'PC':
+            navigate(
+                screen=screen,
+                dst_template=screen.template_path,
+                src_template='templates/gameplay.png',
+                dur_move=1,
+                dur_cycle=0.5,
+                fail_callback=restart_from_world,
+            )
+            gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_A)
+        else:
+            gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_A)
     else:
         screen.log_undetected()
         return False
@@ -108,9 +220,14 @@ def world_to_teamup(dungeon_name: str):
             return True
             
         gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_DPAD_UP, press_delay=0.1)
-        
-        for i in range(5):
-            gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT, press_delay=0.1)
+
+        if config.MODE == 'PC':
+            gamepad.left_analog(x=1, y=0, delay=3)
+            gamepad.left_analog(x=-.75, y=-.4, delay=0.4)
+            gamepad.left_analog_reset()
+        else:
+            for _ in range(5):
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT, press_delay=0.1)
 
         gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_A)
     else:
@@ -236,14 +353,12 @@ def dungeon_55():
             gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_A)
             return False
     
-        print(f"{screen.screen} >> waiting for result")
         for i in range(60):
             if screen.is_finished(sct.grab(monitor)):
                 print(f"{screen.screen} >> dungeon is finished, initiatin rematch")
                 update_farming_result(screen)
 
-                if screen.is_finished(sct.grab(monitor)):
-                    gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_B)
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_A)
                 
                 rematch_dungeon(dungeon_55)
                 main()
@@ -253,6 +368,8 @@ def dungeon_55():
             if i > 0  and i % 5 == 0:
                 print(f"{screen.screen} >> moving forward")
                 gamepad.left_analog(0, 1, 1)
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_B, 0.1)
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_B, 0.1)
                 gamepad.left_analog_reset()
                 print(f"{screen.screen} >> casting skills")
                 cast_skill(2)
@@ -271,19 +388,6 @@ def dungeon_55():
         return False
     
     return True
-
-
-def exit_dungeon():
-    gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_B)
-    gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_START)
-    gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_Y)
-
-    screen = ScreenDungeon55(sct.grab(monitor))
-    for _ in range(5):
-        if screen.is_exit(sct.grab(monitor)):
-            gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_A)
-            break
-        time.sleep(1)
 
 
 def dungeon_abyss():
@@ -345,115 +449,93 @@ def dungeon_abyss():
     return True
 
 
+def exit_dungeon():
+    if config.MODE == 'PC':
+        gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN)
+        gamepad.left_analog(x=0, y=1, delay=2)
+        gamepad.left_analog(x=.5, y=-.25, delay=0.4)
+        gamepad.left_analog_reset()
+        gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_A)
+    else:
+        gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_B)
+        gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_START)
+        gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_Y)
+
+    screen = ScreenDungeon55(sct.grab(monitor))
+    for _ in range(5):
+        if screen.is_exit(sct.grab(monitor)):
+            if config.MODE == 'PC':
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_Y)
+            else:
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_A)
+            break
+        time.sleep(1)
+
+
 def rematch_dungeon(return_callback):
-    res = (800, 600)
     # screen = ScreenDungeon(sct.grab(monitor))
     screen = ScreenDungeon55(sct.grab(monitor))
-    templates = [
-        {
-            'title': 'waypoint',
-            'path': 'templates/dungeon_waypoint_exit.png'
-            # 'path': 'templates/world_waypoint_fight.png'
-        }, {
-            'title': 'profile',
-            'path': 'templates/world_profile.png'
-        }
-    ]
 
     print(f"{screen.screen} >> attempting to rematch dungeon")
 
-    prev_analog_x = 0
-    prev_analog_y = 0
-    for _ in range(30):
-        matches = screen.matches(templates, sct.grab(monitor), 0.4)
-        confirmation = screen.match('templates/dungeon_rematch.png', sct.grab(monitor))
-
-        analog_x = 0
-        analog_y = 0
-
-        if confirmation:
-            print(f"{screen.screen} >> waypoint triggered")
-            gamepad.left_analog_reset()
-            gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_Y)
-            gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_A)
-
-            print(f"{screen.screen} >> waiting matchmaking")
-            for i in range(15):
-                if not screen.match_making(sct.grab(monitor)):
-                    time.sleep(1)
-                    continue
-                else:
-                    print(f"{screen.screen} >> matchmaking started")
-                    break
-            else:
-                print(f"{screen.screen} >> unable to matchmaking, exiting")
-                exit_dungeon()
-                return False
-            
-            attempt = 0
-            max_attempt = 15
-            match_status = 'unconfirmed'
-            while attempt < max_attempt:
-                match_status = match_making(screen)
-                if match_status == 'confirmed':
-                    break
-
-                grab = sct.grab(monitor)
-                if not screen.match_making(grab) and not screen.match_confirmation(grab):
-                    print(f"{screen.screen} >> matchmaking failed, finding rematch")
-                    gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_Y)
-                    attempt = 0
-                else:
-                    print(f"{screen.screen} >> matchmaking failed, retrying")
-                    attempt += 1
-                
-                time.sleep(1)
-            else:
-                print(f"{screen.screen} >> maximum attempt reached, exiting")
-                exit_dungeon()
-                return False
-            
-            if match_status != 'confirmed':
-                print(f"{screen.screen} >> rematch not confirmed, exiting")
-                exit_dungeon()
-                return False
-            
-            return_callback()
-
-        elif len(matches) == len(templates):
-            waypoint = matches[0]
-            waypoint_x, waypoint_y = waypoint['coordinate']
-            waypoint_w, waypoint_h = waypoint['width'], waypoint['height']
-            waypoint_x = waypoint_x + waypoint_w / 2
-            waypoint_y = waypoint_y + waypoint_h / 2
-
-            window = matches[1]
-            window_x, window_y = window['coordinate']
-            window_w, window_h = res
-            window_x = window_x + window_w / 2
-            window_y = window_y + window_h / 2
-
-            dx = waypoint_x - window_x
-            dy = -1 * (waypoint_y - window_y)
-
-            limit_x = window_w
-            limit_y = window_h
-
-            analog_x = dx / limit_x * 4
-            analog_y = dy / limit_y * 4
-
-        if (prev_analog_x != analog_x) or (prev_analog_y != analog_y):
-            print(f"{screen.screen} >> navigating to exit waypoint ({analog_x}, {analog_y})")
-            prev_analog_x = analog_x
-            prev_analog_y = analog_y
-
-        gamepad.left_analog(x=analog_x, y=analog_y)
-        time.sleep(1)
-    else:
-        print(f"{screen.screen} >> unable to find exit waypoint, exiting")
+    def trigger_rematch():
+        print(f"{screen.screen} >> waypoint triggered")
         gamepad.left_analog_reset()
-        exit_dungeon()
-        main()
+        gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_Y)
+        gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_Y)
+
+        print(f"{screen.screen} >> waiting matchmaking")
+        for i in range(15):
+            if not screen.match_making(sct.grab(monitor)):
+                time.sleep(1)
+                continue
+            else:
+                print(f"{screen.screen} >> matchmaking started")
+                break
+        else:
+            print(f"{screen.screen} >> unable to matchmaking, exiting")
+            exit_dungeon()
+            return False
+        
+        attempt = 0
+        max_attempt = 15
+        match_status = 'unconfirmed'
+        while attempt < max_attempt:
+            match_status = match_making(screen)
+            if match_status == 'confirmed':
+                break
+
+            grab = sct.grab(monitor)
+            if not screen.match_making(grab) and not screen.match_confirmation(grab):
+                print(f"{screen.screen} >> matchmaking failed, finding rematch")
+                gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_Y)
+                attempt = 0
+            else:
+                print(f"{screen.screen} >> matchmaking failed, retrying")
+                attempt += 1
+            
+            time.sleep(1)
+        else:
+            print(f"{screen.screen} >> maximum attempt reached, exiting")
+            exit_dungeon()
+            return False
+        
+        if match_status != 'confirmed':
+            print(f"{screen.screen} >> rematch not confirmed, exiting")
+            exit_dungeon()
+            return False
+        
+        return_callback()
+
+    navigate(
+        screen=screen,
+        dst_template='templates/dungeon_waypoint_exit.png',
+        src_template='templates/world_profile.png',
+        confirmation_template='templates/dungeon_rematch.png',
+        dur_limit=30,
+        success_callback=trigger_rematch,
+        fail_callback=lambda: (exit_dungeon(), main())
+    )
 
     return False
 
@@ -480,14 +562,18 @@ def get_window():
 
     if not window:
         return None
+    
+    window.width, window.height = config.RESOLUTION
 
-    window = window[0]
-
+    x = monitor['left'] + window.coordinate[0]
+    y = monitor['top'] + window.coordinate[1]
+    
     return {
-        'left': monitor['left'] + window['coordinate'][0],
-        'top': monitor['top'] + window['coordinate'][1],
-        'width': window['width'],
-        'height': window['height']
+        'left': x,
+        'top': y,
+        'center': (x + window.width // 2, y + window.height // 2),
+        'width': window.width,
+        'height': window.height
     }
 
 
@@ -521,10 +607,10 @@ def main():
         restart_from_world()
         return
 
-    elif matches[0]['title'] == 'mainmenu':
+    elif matches[0].title == 'mainmenu':
         login()
         teamup_screen_confirmed = world_to_teamup(dungeon_name)
-    elif any(m['title'] == 'world' for m in matches): # this failed
+    elif any(m.title == 'world' for m in matches):
         teamup_screen_confirmed = world_to_teamup(dungeon_name)
 
     if not teamup_screen_confirmed:
@@ -544,6 +630,8 @@ if __name__ == "__main__":
     window = get_window()
     if window:
         monitor = window
+
+    # rematch_dungeon(lambda: print("test"))
 
     main()
     sct.close()
