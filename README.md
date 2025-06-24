@@ -1,6 +1,9 @@
 Crystal of Atlan Auto Dungeon
 ========================
 
+#### Note:
+This is an unofficial automation tool for the game Crystal of Atlan. It is designed to automate the process of farming dungeons by simulating player actions. This tool is intended for educational and research purposes especially in computer vision and automation and should be used at your own risk. The developers are not responsible for any consequences that may arise from using this tool, including but not limited to account bans or other issues with the game.
+
 #### How it works:
 The program uses computer vision to detect and interact with the game interface. It takes screenshots of the game window and analyzes them to find specific elements, such as buttons and menus. Once the elements are detected, the program simulates controller inputs to navigate the game and perform actions automatically.
 
