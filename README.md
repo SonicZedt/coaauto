@@ -20,9 +20,10 @@ Note: No game files are modified or injected with code. The program only interac
 3. Open the game and make sure it is running in windowed mode in 800x600 resolution.
 4. Player need to stand by in any town or city, preferably in Chrome Military Factory.
 5. Adjust `config.py` if necessary, 
-6. Run `main.py`
+6. Run `main.py`.
+7. Quickly alt + tab to game window.
 
-##### In Game Configuration:
+#### In Game Configuration:
 - Set **Resolution** to 800x600, windowed mode.
 - Set **Gameplay Screeen** to slot 4 of quick wheel settings.
 - Ensure game window is focused, not minimized.

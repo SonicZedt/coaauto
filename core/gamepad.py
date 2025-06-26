@@ -6,6 +6,13 @@ from model import MatchTemplate
 class Gamepad:
     def __init__(self):
         self.gamepad = vg.VX360Gamepad()
+
+    def set_velocity(self, vx: float = None, vy: float = None):
+        if vx:
+            self.vx = vx
+        
+        if vy:
+            self.vy = vy
     
     def press_button(self, btn: vg.XUSB_BUTTON, press_delay: float = None):
         self.gamepad.press_button(button=btn)
@@ -90,15 +97,9 @@ class Gamepad:
             self, 
             src: MatchTemplate, 
             dst: MatchTemplate, 
-            speed: float = 4) -> tuple[float, float]:
-        # calculate center of src and dst
-        src_x, src_y = src.coordinate
-        src_x = src_x + src.width / 2
-        src_y = src_y + src.height / 2
-
-        dst_x, dst_y = dst.coordinate
-        dst_x = dst_x + dst.width / 2
-        dst_y = dst_y + dst.height / 2
+            speed: float = 4) -> tuple[float, float]:        
+        src_x, src_y = src.center
+        dst_x, dst_y = dst.center
 
         # calculate distance
         # distance is relateive to screen resolution
@@ -121,5 +122,4 @@ class Gamepad:
         return (analog_x, analog_y)
 
     def delay(self):
-        time.sleep(random.uniform(0.1, 0.5))
-    
+        time.sleep(random.uniform(0.1, 0.5))    

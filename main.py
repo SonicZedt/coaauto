@@ -1,12 +1,11 @@
-from enums import STAMINA_TYPE
 from vgamepad import XUSB_BUTTON
-from gamepad import Gamepad
-from screen import *
-from report import FarmingReport
+from core.gamepad import Gamepad
+from core.screen import *
+from core.report import FarmingReport
+from commons import config, templates
 import mss
 import time
 import random
-import config
 
 # gamepad = None
 gamepad = Gamepad()
@@ -26,11 +25,28 @@ def wait_screen(screen: ScreenBase, second: int = 15) -> dict:
 
 
 def navigate(screen: ScreenBase, dst_template: str, src_template: str, confirmation_template: str = "", 
-    dur_move: int = None, dur_limit: int = 30, dur_cycle: float = 1, success_callback: callable = None, fail_callback: callable = None):
+    dur_move: int = None, dur_limit: int = 30, dur_cycle: float = 1, 
+    success_callback: callable = None, fail_callback: callable = None, get_obj_coordinate: callable = None, dst_tolerance: int = 0,
+    force_center_src: bool = True):
 
-    def check_confirmation(dur_current):
+    def check_confirmation(dur_current, dst_center: tuple[int, int]):
+        # a confirmation template is detected
         if confirmation_template:
             return screen.match(confirmation_template, sct.grab(monitor))
+        
+        # destination reached
+        elif dst_center is not None and get_obj_coordinate is not None:
+            current_coordinate = get_obj_coordinate()
+            if not current_coordinate:
+                return None
+             
+            # print(current_coordinate.center, dst_center)
+            in_x = abs(current_coordinate.center[0] - dst_center[0]) <= dst_tolerance
+            in_y = abs(current_coordinate.center[1] - dst_center[1]) <= dst_tolerance
+            
+            return in_x and in_y
+
+        # completed dur_move-th iteration
         elif dur_move is not None:
             return dur_current >= dur_move
 
@@ -51,16 +67,19 @@ def navigate(screen: ScreenBase, dst_template: str, src_template: str, confirmat
     prev_analog_x = 0
     prev_analog_y = 0
 
-    navigation_multiplier = 2.4 if config.MOBILE else 4
+    # navigation_multiplier = 2.4 if config.MOBILE else 4
+    confirmed = False
 
     for i in range(dur_limit):
+        if not confirmed:
+            confirmed = check_confirmation(i, None)
+            
         matches = screen.matches(templates, sct.grab(monitor), 0.4)
-        confirmation = check_confirmation(i)
 
         analog_x = 0
         analog_y = 0
 
-        if confirmation:
+        if confirmed:
             print(f"{screen.screen} >> navigation confirmed")
 
             gamepad.left_analog_reset()
@@ -74,11 +93,21 @@ def navigate(screen: ScreenBase, dst_template: str, src_template: str, confirmat
             dst = matches[0]
             src = matches[1]
 
-            src.width, src.height = config.RESOLUTION
-            analog_x, analog_y = gamepad.get_analog_direction(src, dst, navigation_multiplier)
+            confirmed = check_confirmation(i, dst_center=dst.center)
+            if confirmed:
+                if i == dur_limit:
+                    i -= 1
+
+                continue
+
+            if force_center_src:
+                src.width, src.height = config.RESOLUTION
+                src.center = (src.coordinate[0] + src.width / 2,src.coordinate[1] + src.height / 2)
+
+            analog_x, analog_y = gamepad.get_analog_direction(src, dst, 4)
 
         if (prev_analog_x != analog_x) or (prev_analog_y != analog_y):
-            print(f"{screen.screen} >> navigating to destination ({analog_x}, {analog_y})")
+            print(f"{screen.screen} >> navigating from {src.center} to {dst.center}, with direction ({analog_x}, {analog_y})")
             prev_analog_x = analog_x
             prev_analog_y = analog_y
 
@@ -198,10 +227,12 @@ def world_to_teamup(dungeon_name: str):
             navigate(
                 screen=screen,
                 dst_template=screen.template_path,
-                src_template='templates/gameplay.png',
+                src_template=templates.GAMEPLAY,
                 dur_move=1,
                 dur_cycle=0.5,
                 fail_callback=restart_from_world,
+                # get_obj_coordinate=lambda: screen.find_cursor_gamepad(sct.grab(monitor)),
+                # dst_tolerance=10
             )
             gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_A)
         else:
@@ -529,9 +560,9 @@ def rematch_dungeon(return_callback):
 
     navigate(
         screen=screen,
-        dst_template='templates/dungeon_waypoint_exit.png',
-        src_template='templates/world_profile.png',
-        confirmation_template='templates/dungeon_rematch.png',
+        dst_template=templates.DUNGEON_WAYPOINT_EXIT,
+        src_template=templates.WORLD_PROFILE,
+        confirmation_template=templates.DUNGEON_REMATCH,
         dur_limit=30,
         success_callback=trigger_rematch,
         fail_callback=lambda: (exit_dungeon(), main())
@@ -583,18 +614,63 @@ def restart_from_world():
     main()
 
 
+def calibrate_gamepad(screen: ScreenBase):
+    print(f"{screen.screen} >> calibrating gamepad")
+
+    gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN, press_delay=0.1)
+
+    match = screen.find_cursor_gamepad(sct.grab(monitor))
+    if not match:
+        print(f"{screen.screen} >> gamepad calibration failed, unable to find cursor")
+        gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN, press_delay=0.1)
+        return
+    
+    time = 0.5
+
+    initial_coordinate = match.center
+
+    gamepad.left_analog(x=0.5, y=0.5, delay=time)
+    gamepad.left_analog_reset()
+
+    match = screen.find_cursor_gamepad(sct.grab(monitor))
+    if not match:
+        print(f"{screen.screen} >> gamepad calibration failed, unable to find cursor")
+        gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN, press_delay=0.1)
+        return
+    
+    current_coordinate = match.center
+    
+    dx = abs(current_coordinate[0] - initial_coordinate[0])
+    dy = abs(current_coordinate[1] - initial_coordinate[1])
+
+    # cursor velocity, pixels per 0.1
+    vx = (dx / time) * 0.1
+    vy = (dy / time) * 0.1
+
+    print(initial_coordinate, current_coordinate)
+    print('dx:', dx, vx)
+    print('dy:', dy, vy)
+
+    gamepad.set_velocity(vx, vy)
+    print(f"{screen.screen} >> gamepad calibrated. vx: {vx}, vy: {vy}")
+    gamepad.press_button(XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN, press_delay=0.1)
+
+
 def main():
     dungeon_name = ''
 
     time.sleep(2)
     screen = ScreenGeneric(sct.grab(monitor))
+
+    calibrate_gamepad(screen)
+
     matches = screen.matches(templates=[
         {
             'title': 'mainmenu',
-            'path': 'templates/mainmenu.png' 
+            'path': templates.MAINMENU
         }, {
             'title': 'world',
-            'path': 'templates/world_profile.png' 
+            'path': templates.WORLD_PROFILE
         }
     ], match_threshold=0.6)
 
@@ -632,6 +708,5 @@ if __name__ == "__main__":
         monitor = window
 
     # rematch_dungeon(lambda: print("test"))
-
     main()
     sct.close()
